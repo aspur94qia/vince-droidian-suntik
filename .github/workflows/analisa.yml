@@ -1,0 +1,70 @@
+name: Analisa Vince Lengkap
+on: [workflow_dispatch]
+jobs:
+  analisa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Analisa deb 856 byte + rootfs
+        run: |
+          sudo apt-get install -y binutils file -qq
+          echo "========== 1. ANALISA DEB ADAPTATION-VINCE =========="
+          ls -lh *.deb
+          echo "--- file type ---"
+          file adaptation-vince-4.9-api33.deb
+          echo "--- isi deb (dpkg-deb -c) ---"
+          dpkg-deb -c adaptation-vince-4.9-api33.deb
+          echo "--- control info ---"
+          dpkg-deb -I adaptation-vince-4.9-api33.deb
+          echo ""
+          echo "--- extract dan cek etc ---"
+          rm -rf deb-ex && mkdir deb-ex && dpkg-deb -x adaptation-vince-4.9-api33.deb deb-ex/
+          find deb-ex -type f | head -100
+          ls -R deb-ex/etc 2>/dev/null || echo "tidak ada etc"
+          cat deb-ex/etc/droidian-adaptation/* 2>/dev/null || true
+          cat deb-ex/var/lib/droidian-adaptation/* 2>/dev/null || true
+          
+          echo ""
+          echo "========== 2. ANALISA ROOTFS ORIGINAL GSI =========="
+          wget -q "https://github.com/droidian-images/droidian/releases/download/droidian%2F101.20251130/droidian-OFFICIAL-phosh-phone-rootfs-api33-arm64-101.20251130_20251207.zip" -O rootfs-original.zip
+          ls -lh rootfs-original.zip
+          echo "--- isi rootfs zip (10 file pertama) ---"
+          unzip -l rootfs-original.zip | head -50
+          echo ""
+          echo "--- cek ada boot.img ? ---"
+          unzip -l rootfs-original.zip | grep -i boot
+          echo "--- cek vendor ? ---"
+          unzip -l rootfs-original.zip | grep -i vendor | head -20
+          
+          echo ""
+          echo "========== 3. CEK KERNEL 4.9 COMPAT =========="
+          echo "Cek di deb ada kernel/modules ?"
+          find deb-ex -name "*.ko" | head -20
+          find deb-ex -name "boot*" -o -name "Image*" -o -name "zImage*" | head -20
+          echo ""
+          echo "--- cek adaptation file list ---"
+          cat deb-ex/usr/share/droidian-adaptation/* 2>/dev/null || ls -R deb-ex/usr/ 2>/dev/null | head -100
+          
+          echo ""
+          echo "========== 4. ANALISA FINAL 1.27GB =========="
+          # final zip sudah ada di artifact sebelumnya, kita bikin ulang
+          rm -rf inject && mkdir -p inject/var/lib/droidian-adaptation
+          cp adaptation-vince-4.9-api33.deb inject/var/lib/droidian-adaptation/
+          mkdir -p inject/etc
+          cp -r deb-ex/etc/* inject/etc/ 2>/dev/null || true
+          cp rootfs-original.zip final.zip
+          cd inject && zip -r -g ../final.zip var/ etc/ 2>/dev/null; cd ..
+          echo "Final size:" && ls -lh final.zip
+          unzip -l final.zip | grep -i vince
+          unzip -l final.zip | grep adaptation-vince
+          
+          echo ""
+          echo "========== KESIMPULAN =========="
+          if [ -f deb-ex/etc/droidian-adaptation/deviceinfo ]; then cat deb-ex/etc/droidian-adaptation/deviceinfo; fi
+          echo "Deb size $(stat -c%s adaptation-vince-4.9-api33.deb) byte - isinya cuma $(find deb-ex -type f | wc -l) file"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: analisa-log
+          path: |
+            *.deb
+            deb-ex
