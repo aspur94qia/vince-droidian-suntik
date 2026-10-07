@@ -1,0 +1,29 @@
+name: Suntik Vince 4.9 api33
+on: [workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sudo apt update && sudo apt install wget zip -y
+      - run: wget https://images.droidian.org/rootfs-api33/droidian-rootfs-api33-phosh-arm64-20241021.zip -O rootfs.zip || wget https://images.droidian.org/rootfs-api33/droidian-rootfs-api33-phosh-arm64.zip -O rootfs.zip || wget -r -A "*.zip" https://images.droidian.org/rootfs-api33/ -nd
+      - run: |
+          mkdir -p adaptation-vince-4.9-api33/DEBIAN
+          mkdir -p adaptation-vince-4.9-api33/etc/droidian-adaptation
+          printf "Package: adaptation-vince\nVersion: 4.9-api33-1\nArchitecture: arm64\nMaintainer: vince\nDepends: droidian-base\nDescription: Vince 4.9 A13 api33\n" > adaptation-vince-4.9-api33/DEBIAN/control
+          printf "DEVICE=vince\nKERNEL=4.9\nVENDOR=A13-832M\nAPI=33\nHALIUM=13\n" > adaptation-vince-4.9-api33/etc/droidian-adaptation/vince.conf
+          dpkg-deb --build adaptation-vince-4.9-api33
+          ls -lh *.deb
+      - run: |
+          rm -rf work && mkdir work && cd work
+          unzip -q ../*.zip
+          ls -lh
+          mkdir -p Droidian/var/lib/droidian-adaptation/ || mkdir -p var/lib/droidian-adaptation/
+          cp ../adaptation-vince-4.9-api33.deb Droidian/var/lib/droidian-adaptation/ 2>/dev/null || cp ../adaptation-vince-4.9-api33.deb var/lib/droidian-adaptation/
+          mkdir -p inject && dpkg-deb -x ../adaptation-vince-4.9-api33.deb inject/
+          cp -r inject/etc/* Droidian/etc/ 2>/dev/null || (mkdir -p etc/droidian-adaptation && cp -r inject/etc/* etc/)
+          zip -r ../droidian-vince-4.9-api33-FINAL-SUNTIK.zip . -x "*.git*"
+          cd .. && ls -lh *.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droidian-vince-4.9-api33-FINAL
+          path: droidian-vince-4.9-api33-FINAL-SUNTIK.zip
