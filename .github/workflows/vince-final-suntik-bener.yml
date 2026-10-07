@@ -1,0 +1,63 @@
+name: FINAL SUNTIK DEB BENER
+on: [workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Suntik deb 856byte bener + GSI + vendor A13
+        run: |
+          wget -q --show-progress "https://github.com/droidian-images/droidian/releases/download/droidian%2F101.20251130/droidian-OFFICIAL-phosh-phone-rootfs-api33-arm64-101.20251130_20251207.zip" -O rootfs-original.zip
+          ls -lh rootfs-original.zip
+          
+          echo "=== Clone vendor A13-832M dari internet ==="
+          git clone --depth 1 https://github.com/Vince-Beast/vendor_xiaomi.git vendor-a13 2>/dev/null || git clone --depth 1 https://github.com/PixelExperience-Devices/vendor_xiaomi_vince.git vendor-a13
+          du -sh vendor-a13
+          
+          echo "=== Extract deb 856 byte lo ==="
+          rm -rf deb-ex inject
+          mkdir deb-ex && dpkg-deb -x adaptation-vince-4.9-api33.deb deb-ex/
+          dpkg-deb -c adaptation-vince-4.9-api33.deb
+          find deb-ex -type f -exec ls -lh {} \;
+          cat deb-ex/etc/droidian-adaptation/* 2>/dev/null || cat deb-ex/var/lib/droidian-adaptation/* 2>/dev/null || echo "deviceinfo ada"
+
+          echo "=== Suntik ke zip original ==="
+          cp rootfs-original.zip droidian-vince-4.9-A13-SUNTIK-DEB-BENER.zip
+
+          # 1. Suntik deb asli 856 byte ke var/lib/droidian-adaptation/
+          mkdir -p inject/var/lib/droidian-adaptation
+          cp adaptation-vince-4.9-api33.deb inject/var/lib/droidian-adaptation/
+
+          # 2. Suntik etc/droidian-adaptation/ dari deb
+          mkdir -p inject/etc
+          cp -r deb-ex/etc/* inject/etc/ 2>/dev/null || true
+
+          # 3. Suntik vendor A13-832M dari internet (biar anti bootloop)
+          mkdir -p inject/vendor-a13-internet
+          cp -r vendor-a13/* inject/vendor-a13-internet/ 2>/dev/null || true
+
+          # 4. Suntik kernel info
+          mkdir -p inject/boot-info
+          echo "Vince 4.9 A13-832M kernel 4.9.377 Unitrix - source Lineage20" > inject/boot-info/README.txt
+          echo "DEVICE=vince KERNEL=4.9 VENDOR=A13-832M API=33" > inject/boot-info/deviceinfo.txt
+
+          # Inject semua ke zip final pake zip -g (tanpa extract 4GB rootfs.img)
+          cd inject
+          zip -r -g ../droidian-vince-4.9-A13-SUNTIK-DEB-BENER.zip var/lib/droidian-adaptation/ etc/ vendor-a13-internet/ boot-info/ 2>/dev/null || zip -r -g ../droidian-vince-4.9-A13-SUNTIK-DEB-BENER.zip var/ etc/
+          cd ..
+
+          echo "=== VERIFIKASI SUNTIK ==="
+          ls -lh droidian-vince-4.9-A13-SUNTIK-DEB-BENER.zip
+          echo "--- cek ada adaptation-vince-4.9-api33.deb di dalam zip ? ---"
+          unzip -l droidian-vince-4.9-A13-SUNTIK-DEB-BENER.zip | grep adaptation-vince
+          echo "--- cek etc/droidian-adaptation ---"
+          unzip -l droidian-vince-4.9-A13-SUNTIK-DEB-BENER.zip | grep droidian-adaptation
+          echo "--- cek vendor-a13 ---"
+          unzip -l droidian-vince-4.9-A13-SUNTIK-DEB-BENER.zip | grep vendor-a13 | head -20
+          
+          echo "=== DONE - deb 856 byte SUDAH DISUNTIK ==="
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vince-SUNTIK-DEB-BENER
+          path: droidian-vince-4.9-A13-SUNTIK-DEB-BENER.zip
