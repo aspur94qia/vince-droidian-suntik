@@ -5,21 +5,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt update && sudo apt install wget zip -y
-      - run: wget -q https://images.droidian.org/rootfs-api33/droidian-rootfs-api33-phosh-arm64.zip -O rootfs.zip || wget -q https://images.droidian.org/rootfs-api33/droidian-rootfs-api33-phosh-arm64-20241021.zip -O rootfs.zip
-      - run: ls -lh *.deb rootfs.zip
-      - run: |
-          rm -rf work && mkdir work && cd work
+      - name: Download rootfs latest
+        run: |
+          curl -s https://images.droidian.org/rootfs-api33/ -o index.html
+          LATEST=$(grep -o 'droidian-rootfs-api33-phosh-arm64[^"]*\.zip' index.html | sort -V | tail -1)
+          echo "Latest file: $LATEST"
+          wget -q https://images.droidian.org/rootfs-api33/$LATEST -O rootfs.zip
+          ls -lh rootfs.zip
+      - name: Suntik deb asli hp
+        run: |
+          ls -lh *.deb rootfs.zip
+          rm -rf work && mkdir work
+          cd work
           unzip -q ../rootfs.zip
           mkdir -p var/lib/droidian-adaptation/
-          mkdir -p Droidian/var/lib/droidian-adaptation/ 2>/dev/null || true
           cp ../adaptation-vince-4.9-api33.deb var/lib/droidian-adaptation/
-          cp ../adaptation-vince-4.9-api33.deb Droidian/var/lib/droidian-adaptation/ 2>/dev/null || true
-          mkdir inject && dpkg-deb -x ../adaptation-vince-4.9-api33.deb inject/
+          mkdir -p inject
+          dpkg-deb -x ../adaptation-vince-4.9-api33.deb inject/
           cp -r inject/etc/* etc/ 2>/dev/null || true
-          cp -r inject/etc/* Droidian/etc/ 2>/dev/null || true
-          zip -r ../droidian-vince-4.9-api33-FINAL-SUNTIK.zip . -q
-          cd .. && ls -lh *.zip
+          cd ..
+          zip -r -q droidian-vince-4.9-api33-FINAL-SUNTIK.zip work
+          ls -lh *.zip
       - uses: actions/upload-artifact@v4
         with:
           name: droidian-vince-4.9-api33-FINAL
