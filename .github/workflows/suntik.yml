@@ -5,14 +5,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download rootfs latest
+      - name: Download rootfs api33 STABLE (bukan nightly)
         run: |
-          curl -s https://images.droidian.org/rootfs-api33/ -o index.html
-          LATEST=$(grep -o 'droidian-rootfs-api33-phosh-arm64[^"]*\.zip' index.html | sort -V | tail -1)
-          echo "Latest file: $LATEST"
-          wget -q https://images.droidian.org/rootfs-api33/$LATEST -O rootfs.zip
+          sudo apt-get update -qq && sudo apt-get install -y jq -qq
+          echo "Ambil release STABLE bukan pre-release..."
+          curl -s https://api.github.com/repos/droidian-images/droidian/releases?per_page=20 > rel.json
+          # cuma ambil yang prerelease=false (stable) dan ada api33
+          URL=$(jq -r '.[] | select(.prerelease==false) | .assets[].browser_download_url' rel.json | grep -i "api33" | grep -i "\.zip" | head -1)
+          echo "URL STABLE ketemu: $URL"
+          # kalo gak ketemu api33 di stable terbaru, cek 1-1
+          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
+            URL=$(jq -r '.[] | select(.prerelease==false) | select(.tag_name | contains("101")) | .assets[].browser_download_url' rel.json | grep -i "\.zip" | head -1)
+            echo "Fallback URL 101: $URL"
+          fi
+          wget -q --show-progress "$URL" -O rootfs.zip
           ls -lh rootfs.zip
-      - name: Suntik deb asli hp
+      - name: Suntik deb asli hp 856 byte
         run: |
           ls -lh *.deb rootfs.zip
           rm -rf work && mkdir work
@@ -22,7 +30,7 @@ jobs:
           cp ../adaptation-vince-4.9-api33.deb var/lib/droidian-adaptation/
           mkdir -p inject
           dpkg-deb -x ../adaptation-vince-4.9-api33.deb inject/
-          cp -r inject/etc/* etc/ 2>/dev/null || true
+          cp -rv inject/etc/* etc/ 2>/dev/null || true
           cd ..
           zip -r -q droidian-vince-4.9-api33-FINAL-SUNTIK.zip work
           ls -lh *.zip
