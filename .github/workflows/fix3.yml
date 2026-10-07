@@ -1,4 +1,4 @@
-name: FIX2 NO SIMG2IMG
+name: FIX3 PERMISSION
 on: [workflow_dispatch]
 jobs:
   build:
@@ -6,49 +6,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          echo "=== BUILD TANPA SIMG2IMG BINARY ==="
           wget -q "https://pixeldrain.com/api/file/z4pjqHVv?download" -O lo.zip || wget -q "https://pixeldrain.com/api/file/z4pjqHVv" -O lo.zip
           unzip -o -q lo.zip; rm -rf META-INF data
-
           pip3 install -q brotli || true
           python3 -c "import brotli; open('vendor.new.dat','wb').write(brotli.decompress(open('vendor.new.dat.br','rb').read()))"
           wget -q https://raw.githubusercontent.com/xpirt/sdat2img/master/sdat2img.py -O s.py
           python3 s.py vendor.transfer.list vendor.new.dat v.img
-          ls -lh v.img
-
-          # LANGSUNG MOUNT RAW v.img - SKIP simg2img
-          mkdir -p m || true
-          sudo mount -o loop v.img m 2>&1 || sudo mount -t ext4 -o loop v.img m || true
-          ls m/ | head -20 || true
-
+          mkdir -p m
+          sudo mount -o loop v.img m || true
           rm -rf vn && mkdir vn
-          sudo cp -a m/* vn/ 2>/dev/null || sudo cp -a m/. vn/ 2>/dev/null || cp -a m/* vn/ 2>/dev/null || true
+          sudo cp -a m/* vn/ 2>/dev/null || sudo cp -a m/. vn/ 2>/dev/null || true
           sudo umount m || true
+          sudo mkdir -p vn/etc/init
+          sudo bash -c 'echo "on early-fs
+              mkdir /data/lxc 0755 root root" > vn/etc/init/halium.rc'
+          sudo bash -c 'echo "halium from stock lo z4pjqHVv" > vn/etc/halium_version'
+          sudo chmod 644 vn/etc/init/halium.rc vn/etc/halium_version || true
 
-          mkdir -p vn/etc/init
-          echo "on early-fs
-              mkdir /data/lxc 0755 root root" > vn/etc/init/halium.rc
-          echo "halium from stock lo z4pjqHVv" > vn/etc/halium_version
-
-          # BUILD VENDOR 832M
           truncate -s 832M vendor-HALIUM.img
-          mkfs.ext4 -F -d vn vendor-HALIUM.img
-          ls -lh vendor-HALIUM.img
+          sudo mkfs.ext4 -F -d vn vendor-HALIUM.img || mkfs.ext4 -F -d vn vendor-HALIUM.img
 
-          # BUILD BOOT HALIUM
           git clone --depth 1 https://github.com/Vince-Beast/android_kernel_xiaomi_msm8953.git -b lineage-20 k
           cd k; export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-; make vince_defconfig; make -j$(nproc) Image.gz-dtb; cd ..
           wget -q https://github.com/osm0sis/mkbootimg/releases/download/v2023.12.08/mkbootimg -O mki && chmod +x mki
           echo -n | gzip > ram.gz
           ./mki --kernel k/arch/arm64/boot/Image.gz-dtb --ramdisk ram.gz --base 0x80000000 --kernel_offset 0x00008000 --ramdisk_offset 0x01000000 --tags_offset 0x00000100 --pagesize 2048 --cmdline "androidboot.hardware=qcom androidboot.bootdevice=7824900.sdhci androidboot.selinux=permissive" -o boot-HALIUM.img
-          ls -lh boot-HALIUM.img
 
-          # PACK DROIDIAN
           wget -q https://github.com/droidian-images/droidian/releases/download/droidian%2F101.20251130/droidian-OFFICIAL-phosh-phone-rootfs-api33-arm64-101.20251130_20251207.zip -O g.zip && unzip -o -q g.zip
           rm -rf F && mkdir -p F/data F/META-INF/com/google/android F/HALIUM
           cp data/rootfs.img F/data/; cp boot-HALIUM.img F/HALIUM/boot.img; cp vendor-HALIUM.img F/HALIUM/vendor.img
-          echo 'ui_print("FIX2 BOOT VENDOR LO JADI HALIUM"); package_extract_file("HALIUM/boot.img","/dev/block/bootdevice/by-name/boot"); package_extract_file("HALIUM/vendor.img","/dev/block/bootdevice/by-name/vendor"); package_extract_file("data/rootfs.img","/dev/block/bootdevice/by-name/userdata");' > F/META-INF/com/google/android/updater-script
-          cd F && zip -r -9 ../droidian-FIX2.zip data/ META-INF/ HALIUM/
+          echo 'ui_print("FIX3 BOOT VENDOR LO JADI HALIUM"); package_extract_file("HALIUM/boot.img","/dev/block/bootdevice/by-name/boot"); package_extract_file("HALIUM/vendor.img","/dev/block/bootdevice/by-name/vendor"); package_extract_file("data/rootfs.img","/dev/block/bootdevice/by-name/userdata");' > F/META-INF/com/google/android/updater-script
+          cd F && zip -r -9 ../droidian-FIX3.zip data/ META-INF/ HALIUM/
 
       - uses: actions/upload-artifact@v4
-        with: {name: FIX2-HALIUM, path: droidian-FIX2.zip}
+        with: {name: FIX3-HALIUM, path: droidian-FIX3.zip}
