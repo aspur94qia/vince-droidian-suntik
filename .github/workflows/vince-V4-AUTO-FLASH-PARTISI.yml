@@ -1,0 +1,76 @@
+name: Vince V4 AUTO FLASH boot vendor userdata
+on: [workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build AUTO FLASH PARTISI
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y git zip bc bison flex libssl-dev libelf-dev build-essential gcc-aarch64-linux-gnu python3 cpio -qq
+
+          echo "=== 1. GSI ==="
+          wget -q --show-progress "https://github.com/droidian-images/droidian/releases/download/droidian%2F101.20251130/droidian-OFFICIAL-phosh-phone-rootfs-api33-arm64-101.20251130_20251207.zip" -O gsi.zip
+          unzip -q gsi.zip
+
+          echo "=== 2. Build boot.img halium 13 ==="
+          git clone --depth 1 https://github.com/LineageOS/android_kernel_xiaomi_msm8953.git -b lineage-20 kernel
+          cd kernel && export ARCH=arm64 && export CROSS_COMPILE=aarch64-linux-gnu- && make vince_defconfig && make -j$(nproc) Image.gz-dtb 2>&1 | tail -20
+          ls -lh arch/arm64/boot/Image.gz-dtb
+          cd ..
+          wget -q https://github.com/osm0sis/mkbootimg/releases/download/v2023.12.08/mkbootimg -O mkbootimg && chmod +x mkbootimg
+          echo -n | gzip > ramdisk.cpio.gz
+          ./mkbootimg --kernel kernel/arch/arm64/boot/Image.gz-dtb --ramdisk ramdisk.cpio.gz --base 0x80000000 --kernel_offset 0x00008000 --ramdisk_offset 0x01000000 --tags_offset 0x00000100 --pagesize 2048 --cmdline "androidboot.hardware=qcom androidboot.console=ttyMSM0" -o boot-vince-halium13-4.9-832M.img
+          ls -lh boot-vince-halium13-4.9-832M.img
+
+          echo "=== 3. Build vendor.img A13-832M ==="
+          git clone --depth 1 https://github.com/Vince-Beast/vendor_xiaomi.git vendor-a13
+          rm -f vendor-vince-A13-832M.img && truncate -s 1G vendor-vince-A13-832M.img && mkfs.ext4 -F -L vendor vendor-vince-A13-832M.img
+          mkdir -p /tmp/vm && sudo mount -o loop vendor-vince-A13-832M.img /tmp/vm && sudo cp -rf vendor-a13/* /tmp/vm/ && sudo umount /tmp/vm
+          ls -lh vendor-vince-A13-832M.img
+
+          echo "=== 4. PACK AUTO FLASH PARTISI - INGAT REQUEST LO ==="
+          rm -rf FINAL && mkdir -p FINAL/data FINAL/META-INF/com/google/android FINAL/KOMPLIT/var/lib/droidian-adaptation
+          cp data/rootfs.img FINAL/data/rootfs.img
+          cp boot-vince-halium13-4.9-832M.img FINAL/KOMPLIT/boot.img
+          cp vendor-vince-A13-832M.img FINAL/KOMPLIT/vendor.img
+          cp adaptation-vince-4.9-api33.deb FINAL/KOMPLIT/var/lib/droidian-adaptation/
+          dpkg-deb -x adaptation-vince-4.9-api33.deb /tmp/deb/
+          mkdir -p FINAL/KOMPLIT/etc/droidian-adaptation && cp -r /tmp/deb/etc/droidian-adaptation/* FINAL/KOMPLIT/etc/droidian-adaptation/ 2>/dev/null || true
+
+          # ==== UPDATER-SCRIPT AUTO FLASH KE PARTISI - INI KUNCINYA BOS ====
+          cat > FINAL/META-INF/com/google/android/updater-script << 'EOS'
+          ui_print("==========================================");
+          ui_print("VINCE V4 AUTO FLASH PARTISI");
+          ui_print("boot.img -> boot | vendor.img -> vendor");
+          ui_print("rootfs.img -> userdata");
+          ui_print("==========================================");
+          
+          ui_print("1. Flash BOOT halium 13 ke /boot ...");
+          package_extract_file("KOMPLIT/boot.img", "/dev/block/bootdevice/by-name/boot");
+          
+          ui_print("2. Flash VENDOR A13-832M ke /vendor ...");
+          package_extract_file("KOMPLIT/vendor.img", "/dev/block/bootdevice/by-name/vendor");
+          
+          ui_print("3. Flash ROOTFS Droidian ke /userdata ...");
+          package_extract_file("data/rootfs.img", "/dev/block/bootdevice/by-name/userdata");
+          
+          ui_print("4. Suntik deb 856 byte + deviceinfo...");
+          package_extract_file("KOMPLIT/var/lib/droidian-adaptation/adaptation-vince-4.9-api33.deb", "/tmp/adaptation.deb");
+          
+          ui_print("==========================================");
+          ui_print("SELESAI - REBOOT KE DROIDIAN PHOSH");
+          ui_print("boot -> boot | vendor -> vendor | rootfs -> userdata");
+          ui_print("==========================================");
+          EOS
+
+          cat FINAL/META-INF/com/google/android/updater-script
+
+          cd FINAL && zip -r -9 ../droidian-vince-V4-AUTO-FLASH-boot-vendor-userdata.zip data/ META-INF/ KOMPLIT/
+          cd .. && ls -lh droidian-vince-V4-*.zip
+          unzip -l droidian-vince-V4-AUTO-FLASH-boot-vendor-userdata.zip | grep -E "boot.img|vendor.img|rootfs|updater-script"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vince-V4-AUTO-FLASH-PARTISI
+          path: droidian-vince-V4-AUTO-FLASH-boot-vendor-userdata.zip
