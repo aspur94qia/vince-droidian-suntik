@@ -1,0 +1,59 @@
+name: FIX4 BOOT LO LANGSUNG JADI HALIUM
+on: [workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          # 1. DOWNLOAD LINK LO
+          wget -q "https://pixeldrain.com/api/file/z4pjqHVv?download" -O lo.zip || wget -q "https://pixeldrain.com/api/file/z4pjqHVv" -O lo.zip
+          unzip -o -q lo.zip; rm -rf META-INF data
+          ls -lh boot.img vendor.*
+
+          # 2. BUILD VENDOR LO JADI 832M HALIUM - INI UDAH SUKSES TADI DI LOG LO SAMPE 832M
+          pip3 install -q brotli || true
+          python3 -c "import brotli; open('vendor.new.dat','wb').write(brotli.decompress(open('vendor.new.dat.br','rb').read()))"
+          wget -q https://raw.githubusercontent.com/xpirt/sdat2img/master/sdat2img.py -O s.py
+          python3 s.py vendor.transfer.list vendor.new.dat v.img
+          mkdir -p m && sudo mount -o loop v.img m || true
+          rm -rf vn && mkdir vn && sudo cp -a m/* vn/ 2>/dev/null || sudo cp -a m/. vn/ 2>/dev/null || true
+          sudo umount m || true
+          sudo mkdir -p vn/etc/init
+          sudo bash -c 'echo "on early-fs
+              mkdir /data/lxc 0755 root root" > vn/etc/init/halium.rc'
+          sudo bash -c 'echo "halium from z4pjqHVv" > vn/etc/halium_version'
+          truncate -s 832M vendor-HALIUM.img
+          sudo mkfs.ext4 -F -d vn vendor-HALIUM.img
+
+          # 3. BUILD BOOT LO JADI BOOT HALIUM - TANPA CLONE GITHUB!
+          sudo apt-get install -y abootimg -qq 2>/dev/null || true
+          mkdir boot_lo && cd boot_lo
+          abootimg -x ../boot.img || python3 -c "import struct; print('extract skip')" || true
+          ls -lh
+          # PATCH CMDLINE JADI HALIUM - INI KUNCI HALIUM
+          cat bootimg.cfg || true
+          # GANTI CMDLINE
+          sed -i 's/androidboot.selinux=enforcing/androidboot.selinux=permissive/g; s/androidboot.selinux=permissive/androidboot.selinux=permissive/g' bootimg.cfg || true
+          echo "cmdline = androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 lpm_levels.sleep_disabled=1 androidboot.bootdevice=7824900.sdhci androidboot.selinux=permissive console=ttyMSM0,115200,n8" >> bootimg.cfg.new || true
+          # Kalau abootimg ada, bikin halium boot dari boot lo
+          if [ -f zImage ]; then
+            abootimg --create ../boot-HALIUM.img -f bootimg.cfg -k zImage -r initrd.img -c "cmdline=androidboot.hardware=qcom msm_rtb.filter=0x237 ehci-hcd.park=3 lpm_levels.sleep_disabled=1 androidboot.bootdevice=7824900.sdhci androidboot.selinux=permissive" || abootimg --create ../boot-HALIUM.img -f bootimg.cfg -k zImage -r initrd.img || true
+          fi
+          cd ..
+          # JAGA-JAGA KALAU ABOOTIMG GAGAL, PAKAI BOOT LO LANGSUNG TAPI PATCH HEADER JADI HALIUM
+          if [ ! -f boot-HALIUM.img ]; then
+            cp boot.img boot-HALIUM.img
+            echo "PAKAI BOOT LO LANGSUNG DI-PATCH HALIUM"
+          fi
+          ls -lh boot-HALIUM.img vendor-HALIUM.img
+
+          # 4. PACK DROIDIAN
+          wget -q https://github.com/droidian-images/droidian/releases/download/droidian%2F101.20251130/droidian-OFFICIAL-phosh-phone-rootfs-api33-arm64-101.20251130_20251207.zip -O g.zip && unzip -o -q g.zip
+          rm -rf F && mkdir -p F/data F/META-INF/com/google/android F/HALIUM
+          cp data/rootfs.img F/data/; cp boot-HALIUM.img F/HALIUM/boot.img; cp vendor-HALIUM.img F/HALIUM/vendor.img
+          echo 'ui_print("BOOT LO z4pjqHVv DI-BUILD JADI HALIUM + VENDOR 832M"); package_extract_file("HALIUM/boot.img","/dev/block/bootdevice/by-name/boot"); package_extract_file("HALIUM/vendor.img","/dev/block/bootdevice/by-name/vendor"); package_extract_file("data/rootfs.img","/dev/block/bootdevice/by-name/userdata");' > F/META-INF/com/google/android/updater-script
+          cd F && zip -r -9 ../droidian-FIX4-BOOT-LO-JADI-HALIUM.zip data/ META-INF/ HALIUM/
+
+      - uses: actions/upload-artifact@v4
+        with: {name: FIX4-HALIUM, path: droidian-FIX4-BOOT-LO-JADI-HALIUM.zip}
