@@ -1,0 +1,47 @@
+name: Vince V5 CUSTOM - AUTO FLASH PARTISI
+on: [workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build CUSTOM
+        run: |
+          echo "=== 1. Download file custom dari Pixeldrain ==="
+          FILE_ID="z4pjqHVv"
+          wget -q --show-progress "https://pixeldrain.com/api/file/$FILE_ID" -O custom.zip
+          ls -lh custom.zip && unzip -l custom.zip && unzip -o custom.zip
+
+          echo "=== 2. Convert vendor ==="
+          python3 -c "import brotli; open('vendor.new.dat','wb').write(brotli.decompress(open('vendor.new.dat.br','rb').read()))" || brotli -d vendor.new.dat.br -o vendor.new.dat
+          wget -q https://raw.githubusercontent.com/xpirt/sdat2img/master/sdat2img.py -O sdat2img.py
+          python3 sdat2img.py vendor.transfer.list vendor.new.dat vendor-custom.img
+          ls -lh boot.img vendor-custom.img
+
+          echo "=== 3. GSI ==="
+          wget -q "https://github.com/droidian-images/droidian/releases/download/droidian%2F101.20251130/droidian-OFFICIAL-phosh-phone-rootfs-api33-arm64-101.20251130_20251207.zip" -O gsi.zip
+          unzip -q gsi.zip
+
+          echo "=== 4. PACK AUTO FLASH ==="
+          rm -rf FINAL && mkdir -p FINAL/data FINAL/META-INF/com/google/android FINAL/CUSTOM/var/lib/droidian-adaptation FINAL/CUSTOM/etc/droidian-adaptation
+          cp data/rootfs.img FINAL/data/
+          cp boot.img FINAL/CUSTOM/boot.img
+          cp vendor-custom.img FINAL/CUSTOM/vendor.img
+          cp adaptation-vince-4.9-api33.deb FINAL/CUSTOM/var/lib/droidian-adaptation/ 2>/dev/null || true
+          dpkg-deb -x adaptation-vince-4.9-api33.deb /tmp/deb/ 2>/dev/null; cp -r /tmp/deb/etc/droidian-adaptation/* FINAL/CUSTOM/etc/droidian-adaptation/ 2>/dev/null || true
+
+          cat > FINAL/META-INF/com/google/android/updater-script << 'EOS'
+          ui_print("VINCE V5 CUSTOM - AUTO FLASH");
+          package_extract_file("CUSTOM/boot.img", "/dev/block/bootdevice/by-name/boot");
+          package_extract_file("CUSTOM/vendor.img", "/dev/block/bootdevice/by-name/vendor");
+          package_extract_file("data/rootfs.img", "/dev/block/bootdevice/by-name/userdata");
+          ui_print("SELESAI");
+          EOS
+
+          cd FINAL && zip -r -9 ../droidian-vince-V5-CUSTOM-AUTO-FLASH.zip data/ META-INF/ CUSTOM/
+          cd .. && ls -lh *.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vince-V5-CUSTOM-AUTO-FLASH
+          path: droidian-vince-V5-CUSTOM-AUTO-FLASH.zip
